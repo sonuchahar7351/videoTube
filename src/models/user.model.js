@@ -51,7 +51,12 @@ userSchema.pre("save", async function(next) {
   next();
 });
 
-userSchema.methods.isPasswordCorrect = async function(password) {
+userSchema.methods.isPasswordCorrect = async function (password) {
+
+ 
+  if (typeof password !== 'string' || typeof this.password !== 'string') {
+      throw new Error('Password and hash must be strings');
+  }
   return await bcrypt.compare(password, this.password);
 };
 

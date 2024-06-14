@@ -1,6 +1,7 @@
 const mongoose=require('mongoose');
 const mongooseAggregatePaginate=require('mongoose-aggregate-paginate-v2');
-const schema=mongoose.Schema;
+const { Schema } = mongoose;
+
 const videoSchema=new mongoose.Schema({
      videoFile:{
         type:String,
@@ -32,7 +33,7 @@ const videoSchema=new mongoose.Schema({
       default:true
      },
      owener:{
-      type:schema.Types.ObjectId,
+      type:Schema.Types.ObjectId,
       ref:"User"
      }
 },
