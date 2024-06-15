@@ -6,6 +6,8 @@ const ApiError=require('../utils/ApiError.js');
 const User =require('../models/user.model.js');
 const uploadCloudinary=require('../utils/cloudinary.js');
 const ApiResponse=require('../utils/ApiResponse.js');
+const jwt=require('jsonwebtoken');
+const upload = require("../middlewares/multer.middleware.js");
 
 const generateAccessAndRefreshTokens=async(userId)=>{
    try {
@@ -164,4 +166,125 @@ const logoutUser=asyncHandler(async (req,res)=>{
     .json(new ApiResponse(200,{},"user logged out"))
 })
 
-module.exports={registerUser,loginUser,logoutUser};
+const refreshAccessToken=asyncHandler(async (req,res)=>{
+    const incomingRefreshToken= req.cookies.refreshToken || req.body.refreshToken;
+
+    if(!incomingRefreshToken){
+      throw new ApiError(400,"unauthorized request")
+    }
+
+try {
+  const decodedToken=jwt.verify(
+    incomingRefreshToken,
+    process.env.REFRESH_TOKEN_SECRET
+  )
+   const user=await User.findById(decodedToken?._id);
+   if(!user){
+    throw new ApiError(401,"invalid refresh token")
+   }
+  
+   if(incomingRefreshToken !== user?.refreshToken){
+    throw new ApiError(400,"refresh token is expired or used")
+   }
+  
+   const options = {
+    httpOnly:true,
+    secure:true
+   }
+   const {accessToken, newrefreshToken}= await generateAccessAndRefreshTokens(user._id)
+    
+    return res.status(200)
+    .cookie("accessToken",accessToken,options)
+    .cookie("refreshToken",newrefreshToken,options)
+    .json(
+      new ApiResponse(
+        200,
+        {accessToken,refreshToken:newrefreshToken},
+        "Accees token refreshed"
+      )
+    )
+  
+  
+} catch (error) {
+    throw new ApiError(401,error?.message || "invalid refresh token");
+  
+}
+})
+
+
+const changeCurrentPassword=asyncHandler(async (req,res)=>{
+  
+    const {oldPassword,newPassword}=req.body;
+
+    const user=await User.findById(req.user?._id)
+    const isPasswordCorrect=await user.isPasswordCorrect(oldPassword);
+
+    if(!isPasswordCorrect){
+      throw new ApiError(400,"invalid old password")
+    }
+
+    user.password=newPassword
+    await user.save({validateBeforSave:false})
+
+    return res.status(200).json(new ApiResponse(200,{},"password changed succesfully"))
+
+})
+
+
+const getCurrentUser = asyncHandler(async (req,res)=>{
+  return res.status(200).json(200,req.user,"current user fetched successfully");
+})
+
+
+const updateAccountDetails=asyncHandler(async (req,res)=>{
+  const {fullName,email}=req.body;
+
+  if(!(fullName || email)){
+    throw new ApiError(400,"All field are required")
+  }
+  const user = await User.findByIdAndUpdate(req.user?._id,{
+     $set:{
+       fullName:fullName,
+       email:email
+     }
+  },{new:true})
+
+   .select("-password")
+   return res.status(200)
+   .json(new ApiResponse(200,user,"Account detail updated successfully"));
+
+})
+
+const avatarUpdate=asyncHandler(async(req,res)=>{
+     const avatarLocalPath=req.file?.path
+     if(!avatarLocalPath){throw new ApiError(400,"avatar file is missing")}
+
+       const avatar = await uploadCloudinary(avatarLocalPath)
+       if(!avatar){throw new ApiError(400,"error while uploading on server")}
+       const user=await User.findByIdAndUpdate(req.user?._id,{
+        $set:{
+            avatar:avatar.url
+        }
+       },{new:true}).select("-password")
+
+       return res.json(new ApiResponse(200,user,"cover image is updated successfully")) 
+})
+
+const coverImageUpdate=asyncHandler(async(req,res)=>{
+  const coverImageLocalPath=req.file?.path
+  if(!coverImageLocalPath){throw new ApiError(400,"cover image  file is missing")}
+
+    const coverImage = await uploadCloudinary(coverImageLocalPath)
+    if(!coverImage){throw new ApiError(400,"error while uploading on server")}
+    const user=await User.findByIdAndUpdate(req.user?._id,{
+     $set:{
+         coverImage:coverImage.url
+     }
+    },{new:true}).select("-password")
+
+    return  res.json(new ApiResponse(200,user,"cover image is updated successfully")) 
+})
+
+
+
+module.exports={registerUser,loginUser,logoutUser,refreshAccessToken,changeCurrentPassword,getCurrentUser,updateAccountDetails,avatarUpdate,coverImageUpdate};
